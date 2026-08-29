@@ -19,10 +19,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install feedparser requests
+          pip install feedparser requests google-api-python-client google-auth
 
       - name: Run script
         env:
           BLOG_ID: ${{ secrets.BLOG_ID }}
+          GCP_CLIENT_ID: ${{ secrets.GCP_CLIENT_ID }}
+          GCP_CLIENT_SECRET: ${{ secrets.GCP_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: |
           python main.py
