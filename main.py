@@ -1,21 +1,23 @@
-import feedparser
-import requests
-import json
 import os
+import feedparser
 
-# Archive.org RSS Feed for Premchand Books
-RSS_URL = "https://archive.org/advancedsearch.php?q=creator%3A%28Premchand%29+AND+mediatype%3A%28texts%29&rows=500&output=rss"
+BLOG_ID = os.environ.get("BLOG_ID")
+
+def fetch_archive_books():
+    print("Fetching Archive.org RSS feed...")
+    rss_url = "https://archive.org/advancedsearch.php?q=creator%3A%22Premchand%22+AND+mediatype%3A%22texts%22&rows=500&output=rss"
+    feed = feedparser.parse(rss_url)
+    return feed.entries
 
 def run():
-    print("Fetching Archive.org RSS feed...")
-    feed = feedparser.parse(RSS_URL)
+    entries = fetch_archive_books()
+    print(f"Total books found: {len(entries)}")
     
-    print(f"Total books found: {len(feed.entries)}")
-    
-    if feed.entries:
-        entry = feed.entries[0]
+    if entries:
+        entry = entries[0]
         print(f"Sample Book Title: {entry.title}")
         print(f"Sample Book Link: {entry.link}")
+        print(f"Target Blogger ID: {BLOG_ID}")
 
 if __name__ == "__main__":
     run()
