@@ -23,6 +23,6 @@ jobs:
 
       - name: Run script
         env:
-          BLOG_ID: ${{ vars.BLOG_ID }}
+          BLOG_ID: ${{ secrets.BLOG_ID }}
         run: |
           python main.py
