@@ -22,6 +22,7 @@ jobs:
           pip install feedparser requests
 
       - name: Run script
+        env:
+          BLOG_ID: ${{ vars.BLOG_ID }}
         run: |
           python main.py
-          
