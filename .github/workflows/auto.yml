@@ -21,11 +21,10 @@ jobs:
       - name: Run XML Generator
         run: python main.py
 
-      - name: Commit & Push XML File
+      - name: Commit & Push XML Files
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add blogger_import.xml
-          git commit -m "Generate blogger_import.xml [skip ci]" || exit 0
+          git add blogger_import_*.xml
+          git commit -m "Generate 5 chunked XML files [skip ci]" || exit 0
           git push origin main
-          
