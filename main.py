@@ -8,7 +8,7 @@ def generate_blogger_xml_chunks():
     feed = feedparser.parse(rss_url)
 
     entries = feed.entries
-    chunk_size = 100
+    chunk_size = 50
     post_id = 1000
 
     for i in range(0, len(entries), chunk_size):
