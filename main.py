@@ -1,97 +1,48 @@
-import os
-import smtplib
 import feedparser
-import re
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.utils import formatdate, make_msgid
+import html
+import datetime
 
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
-SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
-BLOGGER_SECRET_EMAIL = os.environ.get("BLOGGER_SECRET_EMAIL")
-
-STATE_FILE = "posted.txt"
-
-def clean_title(title):
-    clean = re.sub(r'[^\w\s\u0900-\u097F]', '', title)
-    return clean.strip()[:100]
-
-def load_posted():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return set(line.strip() for line in f if line.strip())
-    return set()
-
-def save_posted(link):
-    with open(STATE_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{link}\n")
-
-def send_via_direct_tunnel(title, content):
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = clean_title(title)
-    msg['From'] = f"Shivam Thakur <{SENDER_EMAIL}>"
-    msg['To'] = BLOGGER_SECRET_EMAIL
-    msg['Date'] = formatdate(localtime=True)
-    msg['Message-ID'] = make_msgid(domain='gmail.com')
-    
-    # Bypass Headers - Google Filter Bypass
-    msg['X-Mailer'] = 'Thunderbird/115.0'
-    msg['X-Priority'] = '3'
-    
-    part_html = MIMEText(content, 'html', 'utf-8')
-    msg.attach(part_html)
-
-    # PORT 465 SSL Direct Tunnel Engine
-    context = smtplib.ssl.create_default_context()
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, BLOGGER_SECRET_EMAIL, msg.as_string())
-
-def run():
-    if not SENDER_EMAIL or not SENDER_PASSWORD or not BLOGGER_SECRET_EMAIL:
-        print("❌ Secrets missing!")
-        return
-
-    print("Fetching Hindi books from Archive.org...")
+def generate_blogger_xml():
+    print("Fetching 500 Hindi books from Archive.org...")
     rss_url = "https://archive.org/advancedsearch.php?q=mediatype%3A(texts)%20AND%20language%3A(hindi)&sort[]=date+desc&rows=500&output=rss"
     feed = feedparser.parse(rss_url)
 
-    total_books = len(feed.entries)
-    posted_links = load_posted()
+    entries_xml = ""
+    post_id = 1000
 
-    unposted = [entry for entry in feed.entries if getattr(entry, 'link', '') not in posted_links]
-    already_done = total_books - len(unposted)
+    for entry in feed.entries:
+        post_id += 1
+        title = html.escape(getattr(entry, 'title', 'Hindi Book'))
+        link = html.escape(getattr(entry, 'link', '#'))
+        summary = html.escape(getattr(entry, 'summary', 'No summary available.'))
+        
+        published = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        content_html = html.escape(f"<div><p><b>विवरण:</b> {summary}</p><hr/><p>📖 <a href='{link}'>पढ़ें / डाउनलोड करें</a></p></div>")
 
-    print(f"\n==========================================")
-    print(f"📊 PROGRESS UPDATE:")
-    print(f"✔ Completed: {already_done} / {total_books}")
-    print(f"⏳ Pending: {len(unposted)} books")
-    print(f"==========================================\n")
+        entry_template = f"""
+  <entry>
+    <id>tag:blogger.com,1999:blog-1.post-{post_id}</id>
+    <published>{published}</published>
+    <updated>{published}</updated>
+    <category scheme="http://schemas.google.com/g/2005#kind" term="http://schemas.google.com/b/2007#kind#post"/>
+    <title type="text">{title}</title>
+    <content type="html">{content_html}</content>
+    <app:control xmlns:app="http://purl.org/atom/app#">
+      <app:draft>yes</app:draft>
+    </app:control>
+  </entry>"""
+        entries_xml += entry_template
 
-    if not unposted:
-        print("🎉 सभी किताबें प्रोसेस हो चुकी हैं!")
-        return
+    full_xml = f"""<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns='http://www.w3.org/2005/Atom' xmlns:openSearch='http://a9.com/-/spec/opensearch/1.1/' xmlns:blogger='http://schemas.google.com/blogger/2008'>
+  <title type='text'>Archive Hindi Books Bulk Import</title>
+  {entries_xml}
+</feed>"""
 
-    entry = unposted[0]
-    title = getattr(entry, 'title', 'Hindi Book')
-    link = getattr(entry, 'link', '#')
-    summary = getattr(entry, 'summary', 'No summary provided.')
+    with open("blogger_import.xml", "w", encoding="utf-8") as f:
+        f.write(full_xml)
 
-    body_html = f"""
-    <div style="font-family: Arial, sans-serif;">
-        <p><b>विवरण:</b> {summary}</p>
-        <hr/>
-        <p>📖 <a href="{link}">इंटरनेट आर्काइव पर पढ़ें / डाउनलोड करें</a></p>
-    </div>
-    """
-
-    try:
-        send_via_direct_tunnel(title, body_html)
-        save_posted(link)
-        print(f"✅ Tunnel Delivery Successful: {title}")
-        print(f"📊 Updated: {already_done + 1}/{total_books} Done")
-    except Exception as e:
-        print(f"❌ Tunnel Blocked: {str(e)}")
+    print(f"✅ SUCCESS: Saved {len(feed.entries)} books into blogger_import.xml")
 
 if __name__ == "__main__":
-    run()
+    generate_blogger_xml()
