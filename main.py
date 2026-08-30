@@ -1,93 +1,78 @@
 import os
-import requests
+import json
 import feedparser
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 BLOG_ID = os.environ.get("BLOGGER_BLOG_ID")
-CLIENT_ID = os.environ.get("BLOGGER_CLIENT_ID")
-CLIENT_SECRET = os.environ.get("BLOGGER_CLIENT_SECRET")
-REFRESH_TOKEN = os.environ.get("BLOGGER_REFRESH_TOKEN")
+SA_KEY_JSON = os.environ.get("GCP_SA_KEY")
 
-def get_access_token():
-    """Direct Google Auth Endpoint से फ्रेश Access Token लेता है"""
-    url = "https://oauth2.googleapis.com/token"
-    payload = {
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "refresh_token": REFRESH_TOKEN,
-        "grant_type": "refresh_token"
-    }
-    response = requests.post(url, data=payload)
-    data = response.json()
-    if "access_token" not in data:
-        print(f"Token Error: {data}")
-        return None
-    return data["access_token"]
+def get_blogger_service():
+    # Blogger full control scope
+    scopes = ['https://www.googleapis.com/auth/blogger']
+    
+    # Parse JSON Secret directly
+    sa_info = json.loads(SA_KEY_JSON)
+    
+    # Load credentials directly from Service Account key
+    creds = service_account.Credentials.from_service_account_info(
+        sa_info, 
+        scopes=scopes
+    )
+    
+    return build('blogger', 'v3', credentials=creds)
 
-def post_to_blogger(access_token, title, link, summary):
-    """Direct REST API endpoint से पोस्ट पब्लिश/ड्राफ्ट करता है"""
-    url = f"https://www.googleapis.com/blogger/v3/blogs/{BLOG_ID}/posts?isDraft=true"
-    
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-    
+def post_to_blogger(service, title, link, summary):
     html_content = f"""
-    <p><img src="{link}" alt="{title}" /></p>
-    <p>{summary}</p>
-    <ul>
-        <li><b>लेखक:</b> Internet Archive</li>
-        <li><b>भाषा:</b> हिंदी</li>
-    </ul>
+    <p><b>पुस्तक विवरण:</b> {summary}</p>
+    <hr/>
     <p>
-        <a href="{link}" target="_blank">Read Online</a> | 
-        <a href="{link}" target="_blank">Download PDF</a>
+        📖 <a href="{link}" target="_blank">इंटरनेट आर्काइव पर पढ़ें / डाउनलोड करें</a>
     </p>
     """
-
     body = {
         "title": title,
         "content": html_content
     }
 
-    response = requests.post(url, headers=headers, json=body)
-    
-    if response.status_code == 200:
-        print(f"Successfully saved to Draft: {title}")
-    else:
-        print(f"Failed to post {title}: {response.status_code} - {response.text}")
+    try:
+        posts = service.posts()
+        # Direct API call using Service Account
+        request = posts.insert(blogId=BLOG_ID, body=body, isDraft=True)
+        response = request.execute()
+        print(f"✅ Successfully posted to Draft: {title}")
+    except Exception as e:
+        print(f"❌ Failed to post '{title}': {str(e)}")
 
 def fetch_archive_books():
-    print("Fetching Archive.org RSS feed...")
-    rss_uri = "https://archive.org/advancedsearch.php?q=mediatype%3A(texts)%20AND%20language%3A(hindi)&sort[]=date+desc&rows=50&output=rss"
+    print("Fetching Hindi books from Archive.org...")
+    rss_uri = "https://archive.org/advancedsearch.php?q=mediatype%3A(texts)%20AND%20language%3A(hindi)&sort[]=date+desc&rows=10&output=rss"
     feed = feedparser.parse(rss_uri)
     return feed.entries
 
 def run():
-    access_token = get_access_token()
-    if not access_token:
-        print("Failed to acquire access token. Stopping.")
+    if not SA_KEY_JSON or not BLOG_ID:
+        print("Missing required secrets: GCP_SA_KEY or BLOGGER_BLOG_ID.")
         return
 
-    entries = fetch_archive_books()
-    print(f"Total books found in feed: {len(entries)}")
+    try:
+        service = get_blogger_service()
+        entries = fetch_archive_books()
+        print(f"Total entries fetched: {len(entries)}")
 
-    if not entries:
-        print("No entries found.")
-        return
-
-    new_books_added = 0
-    for entry in entries:
-        title = getattr(entry, 'title', 'Untitled Book')
-        link = getattr(entry, 'link', '#')
-        summary = getattr(entry, 'summary', 'No description available.')
+        count = 0
+        for entry in entries:
+            title = getattr(entry, 'title', 'Hindi Book')
+            link = getattr(entry, 'link', '#')
+            summary = getattr(entry, 'summary', 'No summary provided.')
             
-        print(f"Processing new book: {title}")
-        post_to_blogger(access_token, title, link, summary)
-        new_books_added += 1
-        
-        if new_books_added >= 5: 
-            break
+            post_to_blogger(service, title, link, summary)
+            count += 1
+            if count >= 3: # Testing with 3 books
+                break
+
+    except Exception as err:
+        print(f"Execution failed: {str(err)}")
 
 if __name__ == "__main__":
     run()
