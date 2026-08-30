@@ -1,13 +1,13 @@
-name: Run Library Automation
+name: RSS to Blogger Bot
 
 on:
-  schedule:
-    - cron: '0 * * * *'  # हर 1 घंटे में ऑटोमैटिक रन होगा
   workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -15,17 +15,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          pip install feedparser google-api-python-client google-auth
+          python -m pip install --upgrade pip
+          pip install google-api-python-client google-auth feedparser
 
       - name: Run script
         env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
-          BLOGGER_CLIENT_ID: ${{ secrets.BLOGGER_CLIENT_ID }}
-          BLOGGER_CLIENT_SECRET: ${{ secrets.BLOGGER_CLIENT_SECRET }}
-          BLOGGER_REFRESH_TOKEN: ${{ secrets.BLOGGER_REFRESH_TOKEN }}
-        run: |
-          python main.py
+        run: python main.py
