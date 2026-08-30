@@ -1,14 +1,22 @@
 import os
 import smtplib
+import time
+import re
 import feedparser
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formatdate, make_msgid
 
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
 BLOGGER_EMAIL = os.environ.get("BLOGGER_SECRET_EMAIL")
 
 STATE_FILE = "posted.txt"
+
+def clean_title(title):
+    # स्पैम फ़िल्टर से बचने के लिए स्पेशल कैरेक्टर्स साफ़ करना
+    clean = re.sub(r'[^\w\s\u0900-\u097F]', '', title)
+    return clean.strip()[:100]
 
 def load_posted():
     if os.path.exists(STATE_FILE):
@@ -24,15 +32,20 @@ def send_post_via_email(title, content):
     msg = MIMEMultipart()
     msg['From'] = SENDER_EMAIL
     msg['To'] = BLOGGER_EMAIL
-    msg['Subject'] = title
+    msg['Subject'] = clean_title(title)
+    msg['Date'] = formatdate(localtime=True)
+    msg['Message-ID'] = make_msgid()
 
-    msg.attach(MIMEText(content, 'html'))
+    msg.attach(MIMEText(content, 'html', 'utf-8'))
 
     try:
+        # TLS + EHLO हैंडशेक ब्लॉक होने से रोकता है
         server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.ehlo('gmail.com')
         server.starttls()
+        server.ehlo('gmail.com')
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, BLOGGER_EMAIL, msg.as_string())
+        server.sendmail(SENDER_EMAIL, [BLOGGER_EMAIL], msg.as_string())
         server.quit()
         return True
     except Exception as e:
@@ -45,14 +58,12 @@ def run():
         return
 
     print("Fetching Hindi books from Archive.org...")
-    # rows=500 करने से पूरी 313 बुक्स फ़ेच होंगी
     rss_url = "https://archive.org/advancedsearch.php?q=mediatype%3A(texts)%20AND%20language%3A(hindi)&sort[]=date+desc&rows=500&output=rss"
     feed = feedparser.parse(rss_url)
 
     total_books = len(feed.entries)
     posted_links = load_posted()
 
-    # जो बुक्स अभी तक पोस्ट नहीं हुई हैं
     unposted = [entry for entry in feed.entries if getattr(entry, 'link', '') not in posted_links]
     already_done = total_books - len(unposted)
 
@@ -66,7 +77,6 @@ def run():
         print("🎉 ऑल बुक्स पब्लिश हो चुकी हैं!")
         return
 
-    # इस रन में सिर्फ 1 बुक भेजेंगे
     entry = unposted[0]
     title = getattr(entry, 'title', 'Hindi Book')
     link = getattr(entry, 'link', '#')
@@ -76,12 +86,13 @@ def run():
     remaining_after = len(unposted) - 1
 
     body = f"""
-    <p><b>विवरण:</b> {summary}</p>
-    <hr/>
-    <p>📖 <a href="{link}" target="_blank">इंटरनेट आर्काइव पर पढ़ें / डाउनलोड करें</a></p>
-    <br/>
-    <hr/>
-    <small style="color: gray;">🤖 <b>Auto-Post Status:</b> Book {current_num} of {total_books} | Remaining: {remaining_after}</small>
+    <div>
+        <p><b>विवरण:</b> {summary}</p>
+        <hr/>
+        <p>📖 <a href="{link}">इंटरनेट आर्काइव पर पढ़ें / डाउनलोड करें</a></p>
+        <br/>
+        <small>Auto Post: Book {current_num} of {total_books}</small>
+    </div>
     """
 
     if send_post_via_email(title, body):
