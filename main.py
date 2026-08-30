@@ -1,78 +1,58 @@
 import os
-import json
+import smtplib
 import feedparser
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-BLOG_ID = os.environ.get("BLOGGER_BLOG_ID")
-SA_KEY_JSON = os.environ.get("GCP_SA_KEY")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
+SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
+BLOGGER_EMAIL = os.environ.get("BLOGGER_SECRET_EMAIL")
 
-def get_blogger_service():
-    # Blogger full control scope
-    scopes = ['https://www.googleapis.com/auth/blogger']
-    
-    # Parse JSON Secret directly
-    sa_info = json.loads(SA_KEY_JSON)
-    
-    # Load credentials directly from Service Account key
-    creds = service_account.Credentials.from_service_account_info(
-        sa_info, 
-        scopes=scopes
-    )
-    
-    return build('blogger', 'v3', credentials=creds)
+def send_post_via_email(title, content):
+    msg = MIMEMultipart()
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = BLOGGER_EMAIL
+    msg['Subject'] = title
 
-def post_to_blogger(service, title, link, summary):
-    html_content = f"""
-    <p><b>पुस्तक विवरण:</b> {summary}</p>
-    <hr/>
-    <p>
-        📖 <a href="{link}" target="_blank">इंटरनेट आर्काइव पर पढ़ें / डाउनलोड करें</a>
-    </p>
-    """
-    body = {
-        "title": title,
-        "content": html_content
-    }
+    msg.attach(MIMEText(content, 'html'))
 
     try:
-        posts = service.posts()
-        # Direct API call using Service Account
-        request = posts.insert(blogId=BLOG_ID, body=body, isDraft=True)
-        response = request.execute()
-        print(f"✅ Successfully posted to Draft: {title}")
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, BLOGGER_EMAIL, msg.as_string())
+        server.quit()
+        print(f"✅ Email sent successfully for: {title}")
     except Exception as e:
-        print(f"❌ Failed to post '{title}': {str(e)}")
-
-def fetch_archive_books():
-    print("Fetching Hindi books from Archive.org...")
-    rss_uri = "https://archive.org/advancedsearch.php?q=mediatype%3A(texts)%20AND%20language%3A(hindi)&sort[]=date+desc&rows=10&output=rss"
-    feed = feedparser.parse(rss_uri)
-    return feed.entries
+        print(f"❌ Failed to send email for '{title}': {str(e)}")
 
 def run():
-    if not SA_KEY_JSON or not BLOG_ID:
-        print("Missing required secrets: GCP_SA_KEY or BLOGGER_BLOG_ID.")
+    if not SENDER_EMAIL or not SENDER_PASSWORD or not BLOGGER_EMAIL:
+        print("Missing required environment secrets: SENDER_EMAIL, SENDER_PASSWORD, or BLOGGER_SECRET_EMAIL.")
         return
 
-    try:
-        service = get_blogger_service()
-        entries = fetch_archive_books()
-        print(f"Total entries fetched: {len(entries)}")
+    print("Fetching Hindi books from Archive.org...")
+    rss_url = "https://archive.org/advancedsearch.php?q=mediatype%3A(texts)%20AND%20language%3A(hindi)&sort[]=date+desc&rows=10&output=rss"
+    feed = feedparser.parse(rss_url)
 
-        count = 0
-        for entry in entries:
-            title = getattr(entry, 'title', 'Hindi Book')
-            link = getattr(entry, 'link', '#')
-            summary = getattr(entry, 'summary', 'No summary provided.')
-            
-            post_to_blogger(service, title, link, summary)
-            count += 1
-            if count >= 3: # Testing with 3 books
-                break
+    print(f"Total entries fetched: {len(feed.entries)}")
 
-    except Exception as err:
-        print(f"Execution failed: {str(err)}")
+    count = 0
+    for entry in feed.entries:
+        title = getattr(entry, 'title', 'Hindi Book')
+        link = getattr(entry, 'link', '#')
+        summary = getattr(entry, 'summary', 'No summary provided.')
+
+        body = f"""
+        <p><b>विवरण:</b> {summary}</p>
+        <hr/>
+        <p>📖 <a href="{link}" target="_blank">इंटरनेट आर्काइव पर पढ़ें / डाउनलोड करें</a></p>
+        """
+        send_post_via_email(title, body)
+        
+        count += 1
+        if count >= 3:  # Testing with 3 books
+            break
 
 if __name__ == "__main__":
     run()
