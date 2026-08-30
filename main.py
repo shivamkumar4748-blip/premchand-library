@@ -1,20 +1,18 @@
 import os
 import smtplib
-import time
-import re
 import feedparser
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate, make_msgid
 
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
-BLOGGER_EMAIL = os.environ.get("BLOGGER_SECRET_EMAIL")
+BLOGGER_SECRET_EMAIL = os.environ.get("BLOGGER_SECRET_EMAIL")
 
 STATE_FILE = "posted.txt"
 
 def clean_title(title):
-    # स्पैम फ़िल्टर से बचने के लिए स्पेशल कैरेक्टर्स साफ़ करना
     clean = re.sub(r'[^\w\s\u0900-\u097F]', '', title)
     return clean.strip()[:100]
 
@@ -28,33 +26,30 @@ def save_posted(link):
     with open(STATE_FILE, "a", encoding="utf-8") as f:
         f.write(f"{link}\n")
 
-def send_post_via_email(title, content):
-    msg = MIMEMultipart()
-    msg['From'] = SENDER_EMAIL
-    msg['To'] = BLOGGER_EMAIL
+def send_via_direct_tunnel(title, content):
+    msg = MIMEMultipart('alternative')
     msg['Subject'] = clean_title(title)
+    msg['From'] = f"Shivam Thakur <{SENDER_EMAIL}>"
+    msg['To'] = BLOGGER_SECRET_EMAIL
     msg['Date'] = formatdate(localtime=True)
-    msg['Message-ID'] = make_msgid()
+    msg['Message-ID'] = make_msgid(domain='gmail.com')
+    
+    # Bypass Headers - Google Filter Bypass
+    msg['X-Mailer'] = 'Thunderbird/115.0'
+    msg['X-Priority'] = '3'
+    
+    part_html = MIMEText(content, 'html', 'utf-8')
+    msg.attach(part_html)
 
-    msg.attach(MIMEText(content, 'html', 'utf-8'))
-
-    try:
-        # TLS + EHLO हैंडशेक ब्लॉक होने से रोकता है
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.ehlo('gmail.com')
-        server.starttls()
-        server.ehlo('gmail.com')
+    # PORT 465 SSL Direct Tunnel Engine
+    context = smtplib.ssl.create_default_context()
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, [BLOGGER_EMAIL], msg.as_string())
-        server.quit()
-        return True
-    except Exception as e:
-        print(f"❌ Email sending failed: {str(e)}")
-        return False
+        server.sendmail(SENDER_EMAIL, BLOGGER_SECRET_EMAIL, msg.as_string())
 
 def run():
-    if not SENDER_EMAIL or not SENDER_PASSWORD or not BLOGGER_EMAIL:
-        print("Missing required environment secrets.")
+    if not SENDER_EMAIL or not SENDER_PASSWORD or not BLOGGER_SECRET_EMAIL:
+        print("❌ Secrets missing!")
         return
 
     print("Fetching Hindi books from Archive.org...")
@@ -74,7 +69,7 @@ def run():
     print(f"==========================================\n")
 
     if not unposted:
-        print("🎉 ऑल बुक्स पब्लिश हो चुकी हैं!")
+        print("🎉 सभी किताबें प्रोसेस हो चुकी हैं!")
         return
 
     entry = unposted[0]
@@ -82,25 +77,21 @@ def run():
     link = getattr(entry, 'link', '#')
     summary = getattr(entry, 'summary', 'No summary provided.')
 
-    current_num = already_done + 1
-    remaining_after = len(unposted) - 1
-
-    body = f"""
-    <div>
+    body_html = f"""
+    <div style="font-family: Arial, sans-serif;">
         <p><b>विवरण:</b> {summary}</p>
         <hr/>
         <p>📖 <a href="{link}">इंटरनेट आर्काइव पर पढ़ें / डाउनलोड करें</a></p>
-        <br/>
-        <small>Auto Post: Book {current_num} of {total_books}</small>
     </div>
     """
 
-    if send_post_via_email(title, body):
+    try:
+        send_via_direct_tunnel(title, body_html)
         save_posted(link)
-        print(f"✅ Successfully posted: {title}")
-        print(f"📊 Status Updated: {current_num}/{total_books} Done | {remaining_after} Pending")
-    else:
-        print("❌ Error sending email. State not updated.")
+        print(f"✅ Tunnel Delivery Successful: {title}")
+        print(f"📊 Updated: {already_done + 1}/{total_books} Done")
+    except Exception as e:
+        print(f"❌ Tunnel Blocked: {str(e)}")
 
 if __name__ == "__main__":
     run()
