@@ -1,12 +1,15 @@
+
+if __name__ == "__main__":
+    run()
 import os
 import feedparser
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-BLOG_ID = os.environ.get("BLOG_ID")
-CLIENT_ID = os.environ.get("GCP_CLIENT_ID")
-CLIENT_SECRET = os.environ.get("GCP_CLIENT_SECRET")
-REFRESH_TOKEN = os.environ.get("REFRESH_TOKEN")
+BLOG_ID = os.environ.get("BLOGGER_BLOG_ID")
+CLIENT_ID = os.environ.get("BLOGGER_CLIENT_ID")
+CLIENT_SECRET = os.environ.get("BLOGGER_CLIENT_SECRET")
+REFRESH_TOKEN = os.environ.get("BLOGGER_REFRESH_TOKEN")
 
 def get_blogger_service():
     """Google Blogger API कनेक्शन तैयार करता है"""
@@ -24,7 +27,7 @@ def get_existing_posts(service):
     """ब्लॉगर पर पहले से मौजूद सभी पोस्ट्स के टाइटल्स की लिस्ट निकालता है ताकि डुप्लीकेट न आए"""
     existing_titles = set()
     try:
-        request = service.posts().list(blogId=BLOG_ID, status="live,draft", maxResults=500)
+        request = service.posts().list(blogId=BLOG_ID, status="LIVE", maxResults=500)
         while request:
             response = request.execute()
             for post in response.get("items", []):
@@ -110,3 +113,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+    
