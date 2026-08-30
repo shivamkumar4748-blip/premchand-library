@@ -24,7 +24,7 @@ def get_existing_posts(service):
     """ब्लॉगर पर पहले से मौजूद सभी पोस्ट्स के टाइटल्स की लिस्ट निकालता है ताकि डुप्लीकेट न आए"""
     existing_titles = set()
     try:
-        request = service.posts().list(blogId=BLOG_ID, status="LIVE", maxResults=500)
+        request = service.posts().list(blogId=BLOG_ID, status="DRAFT", maxResults=500)
         while request:
             response = request.execute()
             for post in response.get("items", []):
