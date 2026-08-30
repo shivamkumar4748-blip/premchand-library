@@ -1,9 +1,9 @@
-name: RSS to Blogger Email Bot
+Name: RSS to Blogger Email Bot
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/15 * * * *'
 
 jobs:
   build:
