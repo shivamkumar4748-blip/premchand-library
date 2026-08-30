@@ -1,6 +1,3 @@
-
-if __name__ == "__main__":
-    run()
 import os
 import feedparser
 from google.oauth2.credentials import Credentials
@@ -113,4 +110,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-    
