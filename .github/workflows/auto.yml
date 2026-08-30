@@ -1,4 +1,4 @@
-Name: RSS to Blogger Email Bot
+name: RSS to Blogger Email Bot
 
 on:
   workflow_dispatch:
